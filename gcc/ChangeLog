@@ -1,3 +1,691 @@
+2012-04-21  Manuel López-Ibáñez  <manu@gcc.gnu.org>
+
+	PR 35441
+	* c-typeck.c (inform_declaration): New.
+	(build_function_call_vec):  Do not pretty-print
+	expressions when caret is enabled.
+	(convert_arguments): Use inform_declaration.
+
+2012-04-20  Jim Meyering  <meyering@redhat.com>
+
+	* genmodes.c (make_complex_modes): Don't truncate a mode name of
+	length 7 or more when prepending a "C".  Suggested by Richard Guenther.
+
+2012-04-20  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	PR rtl-optimization/44214
+	* fold-const.c (exact_inverse): New function.
+	(fold_binary_loc): Fold vector and complex division by constant into
+	multiply by recripocal with flag_reciprocal_math; fold vector division
+	by constant into multiply by reciprocal with exact inverse.
+
+2012-04-20  Jan Hubicka  <jh@suse.cz>
+
+	* lto-symtab.c (lto_cgraph_replace_node): Merge needed instead of force flags.
+	* cgraph.c (cgraph_add_thunk): Use mark_reachable_node.
+	(cgraph_remove_node): Update.
+	(cgraph_mark_needed_node): Remove.
+	(cgraph_mark_force_output_node): New.
+	(dump_cgraph_node): Do not dump needed flag.
+	(cgraph_node_cannot_be_local_p_1): Update.
+	(cgraph_can_remove_if_no_direct_calls_and_refs): Update.
+	* cgraph.h (symtab_node_base): Add force_output flag.
+	(cgraph_node): Remove needed flag.
+	(varpool_node): Remove force_output flag.
+	(cgraph_mark_needed_node): Remove.
+	(cgraph_mark_force_output_node): New.
+	(cgraph_only_called_directly_or_aliased_p,
+	varpool_can_remove_if_no_refs, varpool_all_refs_explicit_p): Update.
+	* ipa-cp.c (ipcp_generate_summary): Remove out of date assert.
+	* cgraphunit.c (cgraph_decide_is_function_needed): rewrite.
+	(cgraph_add_new_function); Update.
+	(cgraph_mark_if_needed); Update.
+	(verify_cgraph_node): Update.
+	(cgraph_analyze_function): Alias target is reachable.
+	(process_function_and_variable_attributes): Update: externally_visible
+	flag makes function reachable.
+	(cgraph_analyze_functions): Update dumping.
+	* lto-cgraph.c (lto_output_node, lto_output_varpool_node,
+	input_overwrite_node, input_varpool_node): Update streaming.
+	* lto-streamer-out.c (produce_symtab): Use force_output.
+	* ipa.c (process_references): Weakrefs must be processed.
+	(cgraph_remove_unreachable_nodes): Likewise; update for new
+	force_output flag.
+	(varpool_externally_visible_p); Weakrefs are externally visible
+	even if they are not.
+	(function_and_variable_visibility): Update; when processing alias
+	pair force the targets to be output.
+	(whole_program_function_and_variable_visility): Use mark_reachable_node.
+	* trans-mem.c (ipa_tm_mark_needed_node): Remove
+	(ipa_tm_mark_force_output_node): New function.
+	(ipa_tm_create_version_alias, ipa_tm_create_version): Update.
+	* gimple-fold.c (can_refer_decl_in_current_unit_p): Be lax about aliases.
+	* varasm.c (mark_decl_referenced): Update.
+	(find_decl_and_mark_needed): Remove.
+	(find_decl): New function.
+	(weak_finish, finish_aliases_1, assemble_alias): Update; do not mark
+	alias targets as needed.
+	(dump_tm_clone_pairs): Update.
+	* tree-inline.c (copy_bb): Update check.
+	* symtab.c (dump_symtab_base): Dump force_output.
+	* tree-ssa-structalias.c (ipa_pta_execute): Use force_output.
+	* passes.c (execute_todo): Fix dumping.
+	* varpool.c (decide_is_variable_needed, varpool_finalize_decl): Update.
+	(varpool_analyze_pending_decls): Alias target is reachable.
+	(varpool_create_variable_alias): Finalize weakrefs.
+
+2012-04-20  Jakub Jelinek  <jakub@redhat.com>
+
+	PR bootstrap/53021
+	* alias.h (UNIQUE_BASE_VALUE_SP, UNIQUE_BASE_VALUE_ARGP,
+	UNIQUE_BASE_VALUE_FP, UNIQUE_BASE_VALUE_HFP): Define.
+	* alias.c (init_alias_targets): Use UNIQUE_BASE_VALUE_*
+	macros instead of constants.
+	* dse.c (record_store): Check for SP ADDRESS by comparing
+	XWINT to UNIQUE_BASE_VALUE_SP instead of expecting
+	XEXP to be stack_pointer_rtx.
+
+2012-04-20  Richard Guenther  <rguenther@suse.de>
+
+	* tree-ssa-copy.c (propagate_tree_value_into_stmt): Use
+	update_call_from_tree when propagating into a call.
+
+2012-04-20  Alan Modra  <amodra@gmail.com>
+
+	* config/rs6000/rs6000.c (rs6000_emit_savres_rtx): Formatting.
+	(rs6000_emit_prologue, rs6000_emit_epilogue): Likewise.  Rename
+	sp_offset to frame_off.  Move world save code earlier.
+
+2012-04-20  Richard Guenther  <rguenther@suse.de>
+
+	PR tree-optimization/53050
+	* tree-ssa-forwprop.c (ssa_forward_propagate_and_combine):
+	Do only one transform on COND_EXPRs at the same time.
+
+2012-04-19  Jan Hubicka  <jh@suse.cz>
+
+	* symtab.c (dump_symtab_base): Revert accidental checkin.
+
+2012-04-20  Alan Modra  <amodra@gmail.com>
+
+	PR target/53040
+	* config/rs6000/rs6000.c (rs6000_savres_strategy): When using
+	static chain, set REST_INLINE_FPRS too.
+
+2012-04-20  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* tree-dump.c (dequeue_and_dump) <BIT_FIELD_REF>: Dump the three child
+	nodes.
+
+2012-04-20  Richard Guenther  <rguenther@suse.de>
+
+	* tree-vect-loop.c (vect_analyze_loop_operations): Do not
+	vectorize loops that can never run more often than the
+	vectorization factor.
+
+2012-04-19  Jan Hubicka  <jh@suse.cz>
+
+	* symtab.c (dump_symtab_base): Fix dumping of asm lists.
+
+2012-04-19  David Edelsohn  <dje.gcc@gmail.com>
+
+	* config/rs6000/sync.md (fetchop_name): Change ior attribute to "or".
+
+2012-04-19  Jim Meyering  <meyering@redhat.com>
+
+	* genmodes.c (make_complex_modes): Avoid unnecessary use of strncpy.
+	We verified above that the string(including trailing NUL) fits in buf,
+	so just use memcpy.
+
+2012-04-19  Richard Guenther  <rguenther@suse.de>
+
+	* symtab.c (dump_symtab_base): Use TREE_STRING_POINTER
+	for dumping DECL_SECTION_NAME.
+
+2012-04-19  Michael Matz  <matz@suse.de>
+
+	PR middle-end/52977
+	* tree.h (VECTOR_CST_NELTS): Use part number of types again.
+	(struct tree_vector): Adjust GTY length.
+	* tree.c (make_vector_stat): Don't set VECTOR_CST_NELTS.
+
+	* gengtype.c (struct walk_type_data): Add in_record_p and loopcounter
+	members.
+	(walk_type, <TYPE_POINTER, TYPE_ARRAY>): Handle case where our
+	caller emitted the length calulation already.
+	(walk_type, <TYPE_UNION, TYPE_STRUCT>): Emit length calculations
+	before handling any of the fields for structs.
+
+2012-04-19  Richard Guenther  <rguenther@suse.de>
+
+	PR tree-optimization/53031
+	* tree-vrp.c (adjust_range_with_scev): Revert back to
+	using max_loop_iterations.
+
+2012-04-19  Michael Matz  <matz@suse.de>
+
+	* diagnostic.c (emit_diagnostic): Move va_end call after user
+	of the va_list.
+	(warning, warning_at, pedwarn, permerror): Ditto.
+
+2012-04-19  Richard Guenther  <rguenther@suse.de>
+
+	* ira-int.h (ira_allocno_object_iter_cond): Avoid out-of-bound
+	array access.
+
+2012-04-19  Georg-Johann Lay  <avr@gjlay.de>
+
+	PR target/53033
+	* config/avr/avr.c (avr_out_load_psi): Fix assembler template for
+	the case *(X+const).
+
+2012-04-19  Ramana Radhakrishnan  <ramana.radhakrishnan@linaro.org>
+
+	* config/arm/sync.md (sync_optab): Change ior attribute to "or".
+
+2012-04-19   Manuel López-Ibáñez  <manu@gcc.gnu.org>
+
+	PR c/52283/37985
+	* stmt.c (warn_if_unused_value): Skip NOP_EXPR.
+	* convert.c (convert_to_integer): Don't set TREE_NO_WARNING.
+
+2012-04-19  Richard Guenther  <rguenther@suse.de>
+
+	PR rtl-optimization/44688
+	* loop-iv.c (determine_max_iter): Only return max_iter.
+	(iv_number_of_iterations): Also use the recorded loop bound
+	on the maximum number of iterations.
+	* loop-unroll.c (decide_unroll_runtime_iterations): Use
+	max_iter to avoid unrolling loops that do not roll.
+	(decide_unroll_stupid): Likewise.
+
+2012-04-18  Steven Bosscher  <steven@gcc.gnu.org>
+
+	* targhooks.c (default_case_values_threshold): Fix code style nit.
+
+	* stmt.c (add_case_node, expand_case): Move logic to remove/reduce
+	case range and type folding from here...
+	* gimplify.c (gimplify_switch_expr): ... to here.  Expect NULL_TREE
+	type, as documented in tree.def.
+
+2012-04-18  Jan Hubicka  <jh@suse.cz>
+
+	* cgraph.h (verify_symtab, verify_symtab_node, verify_symtab_base):
+	Declare.
+	* cgraphunit.c (verify_cgraph_node): Verify symtab base; do not verify
+	cgraph hash and same comdat groups.
+	(cgraph_optimize); Verify symbol table.
+	* ipa.c (cgraph_remove_unreachable_nodes): Verify symbol table.
+	(dissolve_same_comdat_group_list): Work on symtab nodes.
+	(function_and_variable_visibility): Dissolve variable same comdat group
+	lists, too.
+	* symtab.c: Include timevar.h
+	(verify_symtab_base, verify_symtab_node, verify_symtab): New functions.
+
+2012-04-18  Steven Bosscher  <steven@gcc.gnu.org>
+
+	* tree-switch-conversion.c (info): Remove global pass info.
+	(check_range, check_process_case, check_final_bb, create_temp_arrays,
+	free_temp_arrays, gather_default_values, build_constructors,
+	array_value_type, build_one_array, build_arrays, gen_def_assigns,
+	fix_phi_nodes, gen_inbound_check): Pass info around from ...
+	(process_switch): ... here.  Unify message format.  Return a const
+	char pointer to the failure reason message.
+	(do_switchconv): Unify message format.  Update process_switch usage.
+
+	* tree.def (CASE_LABEL_EXPR): Fix documentation, mention all operands.
+	* tree-cfg.c (edge_to_cases): Fix documentation.
+
+2012-04-18  Uros Bizjak  <ubizjak@gmail.com>
+
+	* config/alpha/sync.md (fetchop_name): Change ior attribute to "or".
+
+2012-04-18  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	PR tree-optimization/52976
+	* tree-ssa-reassoc.c (add_to_ops_vec_max_rank): Delete.
+	(possibly_move_powi): New function.
+	(rewrite_expr_tree): Call possibly_move_powi.
+	(rewrite_expr_tree_parallel): Likewise.
+	(attempt_builtin_powi): Change call of add_to_ops_vec_max_rank to
+	call add_to_ops_vec instead.
+
+2012-04-18  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	PR tree-optimization/52976
+	* tree-ssa-reassoc.c (stmt_is_power_of_op): New function.
+	(decrement_power): Likewise.
+	(propagate_op_to_single_use): Likewise.
+	(zero_one_operation): Handle __builtin_pow* calls in linearized
+	expression trees; factor logic into propagate_op_to_single_use.
+	(undistribute_ops_list): Allow operands with repeat counts > 1.
+
+2012-04-18  Richard Guenther  <rguenther@suse.de>
+
+	PR tree-optimization/44688
+	* cfgloop.h (record_niter_bound): Declare.
+	* tree-ssa-loop-niter.c (record_niter_bound): Export.
+	Update the estimation with the upper bound here...
+	(estimate_numbers_of_iterations_loop): ... instead of here.
+	Do not forcefully reset a recorded upper bound.
+	* tree-vect-loop-manip.c (vect_do_peeling_for_alignment):
+	Record the maximum number of loop iterations of the
+	prologue loop.
+
+2012-04-18  Jan Hubicka  <jh@suse.cz>
+
+	* lto-symtab.c (lto_cgraph_replace_node): Update.
+	* cgraphbuild.c (record_reference, record_type_list,
+	record_eh_tables, mark_address, mark_load, mark_store): Update.
+	* cgraph.c (cgraph_same_body_alias, dump_cgraph_node,
+	cgraph_create_virtual_clone, cgraph_for_node_thunks_and_aliases):
+	Update.
+	* cgraph.h (symtab_node_def, symtab_node, const_symtab_node): Remove.
+	(cgraph_alias_aliased_node, varpool_alias_aliased_node): Update.
+	* reload.c: Fix typo in comment.
+	* rtlanal.c: Likewise.
+	* tree-emultls.c (gen_emutls_addr): Update.
+	* ipa-reference.c (analyze_function): Update.
+	* cgraphunit.c (cgraph_analyze_function,
+	cgraph_process_same_body_aliases, assemble_thunks_and_aliases):
+	Update.
+	* ipa-ref.c (ipa_record_reference): Reorg to avoid reference types.
+	(ipa_remove_reference): Likewise.
+	(ipa_remove_all_refering): Rename to ...
+	(ipa_remove_all_referring): ... this one; update.
+	(ipa_dump_references): Update.
+	(ipa_dump_referring): Update.
+	(ipa_clone_references): Update.
+	(ipa_clone_refering): Rename to ...
+	(ipa_clone_referring): ... this one; update.
+	(ipa_ref_cannot_lead_to_return): Update.
+	(ipa_ref_has_aliases_p): Update.
+	* ipa-ref.h (symtab_node_def, symtab_node, const_symtab_node): New
+	forward typedefs.
+	(ipa_ref_type): Remove.
+	(ipa_ref_ptr_u): Remove.
+	(ipa_ref): Remove referencing, refered, refered_index, refering_type
+	and refered_type; add referring, referred and referred_index.
+	(ipa_ref_list): Rename refering to referring.
+	(ipa_record_reference, ipa_remove_all_referring, ipa_dump_referring,
+	ipa_clone_references, ipa_clone_referring): Update prototypes.
+	* lto-cgraph.c (referenced_from_other_partition_p): Update.
+	(lto_output_ref): Update.
+	(add_references): Update.
+	(input_varpool_node): Update.
+	(input_refs): Update.
+	* ipa-ref-inline.h (ipa_ref_node): Update.
+	(ipa_ref_varpool_node): Update.
+	(ipa_ref_referring_node); Update.
+	(ipa_ref_referring_varpool_node): Update.
+	(ipa_ref_referring_ref_list); Update.
+	(ipa_ref_referred_ref_list): Update.
+	(ipa_ref_list_first_referring): Update.
+	(ipa_empty_ref_list): Update.
+	(ipa_ref_list_refering_iterate): Rename to ...
+	(ipa_ref_list_referring_iterate): ... this one.
+	* cse.c: Update comment.
+	* ipa-utils.c (ipa_reverse_postorder): Update.
+	* tree-ssa-alias.c: Update.
+	* ipa-inline.c (reset_edge_caches): Update.
+	(update_caller_keys): Update.
+	* ipa-inline.h: Update comments.
+	* jump.c: Update comment.
+	* alias.c: Likewise.
+	* ipa.c (process_references): Update.
+	(cgraph_remove_unreachable_nodes): Likewise.
+	(ipa_discover_readonly_nonaddressable_var): Likewise.
+	(cgraph_address_taken_from_non_vtable_p): Likewise.
+	* trans-mem.c (ipa_tm_execute): Update.
+	* simplify-rtx.c: Fix comment.
+	* rtl.c: Fix comment.
+	* symtab.c (symtab_unregister_node): Update.
+	* varpool.c (dump_varpool_node): Update.
+	(varpool_analyze_pending_decls): Update.
+	(assemble_aliases): Update.
+	(varpool_for_node_and_aliases): Update.
+
+2012-04-18  Richard Guenther  <rguenther@suse.de>
+
+	* cfgloop.h (estimate_numbers_of_iterations_loop): Remove
+	use_undefined_p parameter.
+	* tree-flow.h (estimate_numbers_of_iterations): Likewise.
+	* tree-ssa-loop-niter.c (estimate_numbers_of_iterations_loop):
+	Likewise.
+	(estimate_numbers_of_iterations): Likewise.
+	(estimated_loop_iterations): Adjust.
+	(max_loop_iterations): Likewise.
+	(scev_probably_wraps_p): Likewise.
+	* tree-ssa-loop.c (tree_ssa_loop_bounds): Likewise.
+	* tree-vrp.c (adjust_range_with_scev): Use max_stmt_executions,
+	not max_loop_iterations.
+	(execute_vrp): Remove explicit number of iterations estimation.
+
+2012-04-18  Enkovich Ilya  <ilya.enkovich@intel.com>
+
+	* config/i386/linux-common.h: New.
+
+	* config.gcc: Add i386/linux-common.h before
+	all i386/linux.h and i386/linux64.h usages.
+
+	* config/i386/gnu-user.h (GNU_USER_TARGET_LINK_SPEC): New.
+	(LINK_SPEC): Use GNU_USER_TARGET_LINK_SPEC.
+	* config/i386/gnu-user64.h: Likewise.
+
+	* config/i386/gnu-user.common.h (GNU_USER_TARGET_CC1_SPEC): New.
+	(CC1_SPEC): Use GNU_USER_TARGET_CC1_SPEC.
+	(GNU_USER_TARGET_MATHFILE_SPEC): New.
+	(ENDFILE_SPEC): Use GNU_USER_TARGET_MATHFILE_SPEC.
+
+2012-04-18  Jan Hubicka  <jh@suse.cz>
+
+	* cgraph.c (cgraph_node_name): Remove.
+	(dump_cgraph_node): Use dump_symtab_base; reformat.
+	* cgraph.h (symtab_node_asm_name, symtab_node_name, dump_symtab,
+	debug_symtab, dump_symtab_node, debug_symtab_node, dump_symtab_base):
+	Declare.
+	(cgraph_node_name, varpool_node_name): Remove.
+	(cgraph_node_asm_name, varpool_node_asm_name,
+	cgraph_node_name, varpool_node_name): New.
+	* tree-pass.h (TODO_dump_cgraph): Rename to ...
+	(TODO_dump_symtab): ... this one.
+	* ipa-cp (pass_ipa_cp): Update.
+	* ia-reference.c (generate_summary, read_write_all_from_decl,
+	propagate, ipa_reference_read_optimization_summary): Update.
+	* cgraphunit.c (cgraph_analyze_functions): Update.
+	(cgraph_optimize): Update.
+	* ipa-ref.c (ipa_dump_references): Update.
+	(ipa_dump_refering): Update.
+	* ipa-inline.c (pass_ipa_inline): Update.
+	* matrix-reorg.c (pass_ipa_matrix_reorg): Update.
+	* ipa.c (pass_ipa_function_visibility,
+	pass_ipa_whole_program_visibility): Update.
+	* tree-sra.c (pass_early_ipa_sra): Update.
+	* symtab.c: Include langhooks.h
+	(symtab_node_asm_name): New.
+	(symtab_node_name): New.
+	(symtab_type_names): New static var.
+	(dump_symtab_base): New.
+	(dump_symtab_node, dump_symtab): New.
+	(debug_symtab_node,  debug_symtab): New.
+	* tree-ssa-structalias.c: Dump symbol table.
+	* pases.c (execute_todo): Handle TODO_dump_symtab instead
+	of TODO_dump_cgraph.
+	* varpoo.c (varpool_node_name): Remove.
+	(dump_varpool_node): Use dump_symtab_base; reformat.
+
+2012-04-18  Manuel López-Ibáñez  <manu@gcc.gnu.org>
+
+        * doc/invoke.texi (Language Independent Options): @item should be
+	before @opindex.
+
+2012-04-17  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	PR bootstrap/53021
+	* rtl.c (rtx_code_size): Handle ADDRESS.
+
+2012-04-17  Tom de Vries  <tom@codesourcery.com>
+
+	* tree-iterator.c (append_to_statement_list_1): Handle case that *list_p
+	is not a STMT_LIST.
+
+2012-04-17  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/53020
+	* config/i386/sync.md (atomic_<code><mode>): Rename to
+	atomic_<logic><mode>.
+
+2012-04-17  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	* rtl.def (ADDRESS): Turn operand into a HOST_WIDE_INT.
+	* alias.c (reg_base_value): Expand and update comment.
+	(arg_base_value): New variable.
+	(unique_id): Move up file.
+	(unique_base_value, unique_base_value_p, known_base_value_p): New.
+	(find_base_value): Use arg_base_value and known_base_value_p.
+	(record_set): Document REG_NOALIAS handling.  Use unique_base_value.
+	(find_base_term): Use known_base_value_p.
+	(base_alias_check): Use unique_base_value_p.
+	(init_alias_target): Initialize arg_base_value.  Use unique_base_value.
+	(init_alias_analysis): Use 1 as the first id for REG_NOALIAS bases.
+
+2012-04-17  Pat Haugen <pthaugen@us.ibm.com>
+
+	* config/rs6000/rs6000.h (SLOW_UNALIGNED_ACCESS): Remove DImode.
+
+2012-04-17  Michael Matz  <matz@suse.de>
+
+	PR tree-optimization/18437
+	* tree-vectorizer.h (_stmt_vec_info.stride_load_p): New member.
+	(STMT_VINFO_STRIDE_LOAD_P): New accessor.
+	(vect_check_strided_load): Declare.
+	* tree-vect-data-refs.c (vect_check_strided_load): New function.
+	(vect_analyze_data_refs): Use it to accept strided loads.
+	* tree-vect-stmts.c (vectorizable_load): Ditto and handle them.
+
+2012-04-17  Richard Guenther  <rguenther@suse.de>
+
+	PR middle-end/53011
+	* tree-eh.c (cleanup_empty_eh_merge_phis): Properly discard
+	loops when redirecting an entry or latch edge.
+
+2012-04-17  Bernd Schmidt  <bernds@codesourcery.com>
+
+	* sel-sched.c (sel_global_init): Revert previous change.
+
+2012-04-17  Richard Guenther  <rguenther@suse.de>
+
+	* tree-flow.h (array_at_struct_end_p): Move declaration ...
+	* tree.h (array_at_struct_end_p): ... here.
+	* tree-ssa-loop-niter.c (array_at_struct_end_p): Move ...
+	* expr.c (array_at_struct_end_p): ... here.  Rewrite.
+
+2012-04-17  Steven Bosscher  <steven@gcc.gnu.org>
+
+	* stmt.c (cost_table_, use_cost_table, cost_table_initialize,
+	COST_TABLE): Remove.
+	(estimate_case_costs): Remove.
+	(expand_case): Do not call estimate_case_costs
+	to set use_cost_table.
+	(balance_case_nodes): Do not use use_cost_table.
+
+2012-04-16  Jan Hubicka  <jh@suse.cz>
+
+	* cgraph.c (cgraph_hash, assembler_name_hash): Remove.
+	(hash_node, eq_node): Remove.
+	(cgraph_create_node): Do not handle hashtable.
+	(cgraph_get_node): Remove.
+	(cgraph_insert_node_to_hashtable): Remove.
+	(hash_node_by_assembler_name): Remove.
+	(eq_assembler_name): Remove.
+	(cgraph_node_for_asm): Rewrite.
+	(cgraph_find_replacement_node): Break out from ...
+	(cgraph_remove_node): ... here; do not maintain hashtables.
+	(change_decl_assembler_name): Remove.
+	(cgraph_clone_node): Do not maintain hashtables.
+	* cgraph.h (const_symtab_node): New typedef.
+	(cgraph_insert_node_to_hashtable): Remove.
+	(symtab_get_node, symtab_node_for_asm,
+	symtab_insert_node_to_hashtable): Declare.
+	(cgraph_find_replacement_node): Declare.
+	(cgraph_get_node, varpool_get_node): Turn into inlines.
+	(cgraph, varpool): Work sanely on NULL pointers.
+	(FOR_EACH_SYMBOL): New walker.
+	* ipa-inline-transform.c (save_inline_function_body): Use
+	symtab_insert_node_to_hashtable.
+	* symtab.c: Include ggc.h and diagnostics.h
+	(symtab_hash, assembler_name_hash): New static vars;
+	(hash_node, eq_node, hash_node_by_assembler_name,
+	eq_assembler_name, insert_to_assembler_name_hash,
+	unlink_from_assembler_name_hash): New.
+	(symtab_register_node): Update hashtables.
+	(symtab_insert_node_to_hashtable): New.
+	(symtab_unregister_node): Update hashtables.
+	(symtab_get_node): New.
+	(symtab_node_for_asm): New.
+	(change_decl_assembler_name): New.
+	* Makefile.in (symtab.o): Needs GTY.
+	* varpool.c (varpool_hash): Remove.
+	(hash_varpool_node, eq_varpool_node, varpool_get_node): Remove.
+	(varpool_node): Rewrite using varpool_get_node.
+	(varpool_remove_node): DO not maintain hashtables.
+	(varpool_node_for_asm); Rewrite.
+
+2012-04-16  Sandra Loosemore  <sandra@codesourcery.com>
+
+	* doc/invoke.texi:  Copy-edit to put verbs in the present tense
+	when describing the current behavior of GCC.
+
+2012-04-16  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	* genemit.c (gen_exp): Remove ADDRESS handling.
+	* genoutput.c (scan_operands): Likewise.
+	* genpeep.c (match_rtx): Likewise.
+	* genrecog.c (add_to_sequence): Likewise.
+
+2012-04-16  David Edelsohn  <dje.gcc@gmail.com>
+
+	* doc/install.texi (Specific, *-ibm-aix*): Update assembler bug
+	status.
+
+2012-04-16  Martin Jambor  <mjambor@suse.cz>
+
+	* tree-sra.c (build_ref_for_model): Create COMPONENT_REFs only for
+	bit-fields.
+
+2012-04-16  Ulrich Weigand  <ulrich.weigand@linaro.org>
+
+	PR target/51819
+	* config/arm/arm.c (arm_print_operand): Fix invalid alignment
+	hints for 'A' operand types.
+
+2012-04-16  Jan Hubicka  <jh@suse.cz>
+
+	* cgraph.h (symtab_node_base): Add next and previous pointers.
+	(cgraph_node): Remove next and preivous pointers.
+	(varpool_node): Likewise; remove next/previous GTY marker;
+	it is not type safe.
+	(symtab_node_def): Update GTY marker
+	(x_cgraph_nodes, cgraph_nodes): Remove.
+	(symtab_nodes): New function.
+	(cgraph_order): Rename to ...
+	(symtab_order): ... this one.
+	(symtab_register_node, symtab_unregister_node, symtab_remove_node):
+	Declare.
+	(x_varpool_nodes, varpool_nodes): Remove.
+	(FOR_EACH_STATIC_VARIABLE): Update.
+	(symtab_function_p, symtab_variable_p): New function.
+	(FOR_EACH_VARIABLE): Update.
+	(varpool_first_variable, varpool_next_variable): New functions.
+	(FOR_EACH_VARIABLE): Update.
+	(cgraph_first_defined_function): Update.
+	(cgraph_next_defined_function, cgraph_next_defined_function): Update.
+	(FOR_EACH_DEFINED_FUNCTION, FOR_EACH_FUNCTION): Update.
+	(cgraph_first_function, cgraph_next_function): New.
+	(FOR_EACH_FUNCTION): Update.
+	(cgraph_first_function_with_gimple_body,
+	cgraph_next_function_with_gimple_body): Update.
+	* symtab.c: New file.
+	* cgraph.c: Update copyright dates.
+	(x_cgraph_nodes, cgraph_order): Remove.
+	(NEXT_FREE_NODE): Update.
+	(SET_NEXT_FREE_NODE): New.
+	(cgraph_create_node_1): Remove common code.
+	(cgraph_create_node); Remove common code; call symtab_register_node.
+	(cgraph_remove_node): Remove common code; call symtab_unregister-node.
+	(cgraph_add_asm_node); update.
+	(cgraph_clone_node): Register new node.
+	* cgraphunit.c (process_function_and_variable_attributes): Update.
+	(cgraph_analyze_functions): Update.
+	(cgraph_analyze_functions): Update.
+	(cgraph_output_in_order): Update.
+	* lto-cgraph.c (input_node, input_varpool_node, input_cgraph_1): Update.
+	* ipa-inline.c (recursive_inlining); update.
+	* lto-streamer-in.c (lto_input_toplevel_asms); Update.
+	* ipa.c (cgraph_remove_unreachable_nodes): Update.
+	* Makefile.in: Add symtab.o
+	* varpool.c (x_varpool_nodes): Remove
+	(varpool_node): Remove common code; call symtab_register_node.
+	(varpool_remove_node); Remove common code; call symtab_unregister_node.
+
+2012-04-16  Richard Guenther  <rguenther@suse.de>
+
+	PR middle-end/52977
+	* tree.h (VECTOR_CST_NELTS): Adjust.
+	(struct tree_vector): Add explicit length field.
+	(make_vector_stat): Declare.
+	(make_vector): Define.
+	* tree.c (make_vector_stat): New function.
+	(build_vector_stat): Use it.
+	* tree-streamer-in.c (streamer_alloc_tree): Likewise.
+
+2012-04-16  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	PR tree-optimization/52976
+	* tree-ssa-reassoc.c (add_to_ops_vec_max_rank): New function.
+	(undistribute_ops_list): Ops with repeat counts aren't eligible for
+	undistribution.
+	(attempt_builtin_powi): Call add_to_ops_vec_max_rank.
+
+2012-04-16  Jan Hubicka  <jh@suse.cz>
+
+	* cgraph.h (FOR_EACH_VARIABLE, FOR_EACH_VARIABLE, FOR_EACH_FUNCTION):
+	New macros.
+	* lto-symtab.c (lto_symtab_merge_cgraph_nodes): Use FOR_EACH
+	walkers to walk cgraph and varpool.
+	* cgraph.c (cgraph_node_for_asm): Likewise.
+	(dump_cgraph): Likewise.
+	* value-prof.c (init_node_map): Likewise.
+	* tree.c (free_lang_data_in_cgraph): Likewise.
+	* tree-emutls.c: (ipa_lower_emutls): Likewise.
+	* ipa-reference.c (generate_summary, propagate): Likewise.
+	* cgraphunit.c (verify_cgraph, cgraph_process_same_body_aliases,
+	cgraph_mark_functions_to_output, cgraph_output_in_order,
+	output_weakrefs, cgraph_materialize_all_clones,
+	cgraph_optimize): Likewise.
+	* lto-cgraph.c (merge_profile_summaries): Likewise.
+	(input_cgraph): Likewise.
+	* ipa-pure-const.c (generate_summary): Likewise.
+	(propagate): Likwise.
+	* ipa-utils.c (ipa_reduced_postorder): Likewise.
+	(ipa_free_postorder_info): Likewise.
+	(ipa_reverse_postorder): Likewise.
+	* ipa-inline.c (ipa_inline): Likewise.
+	* matrix-reorg.c (find_matrices_decl): Likewise.
+	(matrix_reorg): Likewise.
+	* tree-vectorizer.c (increase_alignment): Likewise.
+	* ipa.c (cgraph_remove_unreachable_nodes): Likewise.
+	(function_and_variable_visibility): Likewise.
+	(whole_program_function_and_variable_visibility): Likewise.
+	(ipa_cdtor_merge): Likewise.
+	* trans-mem.c (ipa_tm_execute): Likewise.
+	* ipa-inline-analysis.c (dump_inline_summaries): Likewise.
+	* ipa-prop.c (ipa_print_all_jump_functions): Likewise.
+	(ipa_print_all_params): Likewise.
+	(ipa_update_after_lto_read): Likewise.
+	* tree-profie.c (tree_profiling): Likewise.
+	* tree-ssa-structalias.c (ipa_pta_execute): Likewise.
+	* passes.c (dump_passes): Likewise.
+	(do_per_function): Likewise.
+	(ipa_write_summaries): Likewise.
+	* varpool.c (dump_varpool): Likewise.
+	(varpool_node_for_asm): Likewise.
+	(varpool_assemble_pending_decls): Likewise.
+
+2012-04-16  Richard Guenther  <rguenther@suse.de>
+
+	PR tree-optimization/52975
+	* tree-if-conv.c (predicate_bbs): Do not simplify inverted
+	condition but always mark it with TRUTH_NOT_EXPR.
+
+2012-04-16  Richard Guenther  <rguenther@suse.de>
+
+	PR tree-optimization/52975
+	* tree-ssa-forwprop.c (combine_cond_exprs): New function.
+	(ssa_forward_propagate_and_combine): Call it for COND_EXPRs
+	and VEC_COND_EXPRs.  Also combine into VEC_COND_EXPRs condition.
+	* fold-const.c (operand_equal_p): Handle TARGET_MEM_REF.
+
 2012-04-14  Uros Bizjak  <ubizjak@gmail.com>
 
 	* config/i386/sse.md (ssse3_plusminus): New code iterator.
@@ -447,8 +1135,7 @@
 
 	PR rtl-optimization/52876
 	* emit-rtl.c (set_reg_attrs_from_value): Handle arbitrary value.
-	Don't call mark_reg_pointer for incompatible pointer sign
-	extension.
+	Don't call mark_reg_pointer for incompatible pointer sign extension.
 
 	* reginfo.c (reg_scan_mark_refs): Call set_reg_attrs_from_value
 	directly.
@@ -1289,8 +1976,7 @@
 
 	PR middle-end/50708
 	* double-int.h (rshift_double): Remove.
-	* double-int.c (lshift_double): Use absu_hwi to make count
-	positive.
+	* double-int.c (lshift_double): Use absu_hwi to make count positive.
 	(rshift_double): Make static, take unsigned count argument,
 	remove handling of negative count argument.
 	(double_int_rshift): Dispatch to lshift_double.
@@ -3917,8 +4603,7 @@
 	2012-02-20  Richard Guenther  <rguenther@suse.de>
 	PR tree-optimization/52298
 	* tree-vect-stmts.c (vectorizable_load): Properly use
-	STMT_VINFO_DR_STEP instead of DR_STEP when vectorizing
-	outer loops.
+	STMT_VINFO_DR_STEP instead of DR_STEP when vectorizing outer loops.
 
 2012-02-28  Aldy Hernandez  <aldyh@redhat.com>
 

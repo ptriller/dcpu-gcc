@@ -156,56 +156,36 @@ FILE *cgraph_dump_file;
 /* Used for vtable lookup in thunk adjusting.  */
 static GTY (()) tree vtable_entry_type;
 
-/* Determine if function DECL is needed.  That is, visible to something
-   either outside this translation unit, something magic in the system
-   configury.  */
+/* Determine if function DECL is trivially needed and should stay in the
+   compilation unit.  This is used at the symbol table construction time
+   and differs from later logic removing unnecesary functions that can
+   take into account results of analysis, whole program info etc.  */
 
 bool
 cgraph_decide_is_function_needed (struct cgraph_node *node, tree decl)
 {
   /* If the user told us it is used, then it must be so.  */
-  if (node->symbol.externally_visible)
+  if (node->symbol.force_output)
     return true;
 
-  /* ??? If the assembler name is set by hand, it is possible to assemble
-     the name later after finalizing the function and the fact is noticed
-     in assemble_name then.  This is arguably a bug.  */
-  if (DECL_ASSEMBLER_NAME_SET_P (decl)
-      && (!node->thunk.thunk_p && !node->same_body_alias)
-      && TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (decl)))
-    return true;
+  /* Double check that no one output the function into assembly file
+     early.  */
+  gcc_checking_assert (!DECL_ASSEMBLER_NAME_SET_P (decl)
+	               || (node->thunk.thunk_p || node->same_body_alias)
+	               ||  !TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (decl)));
 
-  /* With -fkeep-inline-functions we are keeping all inline functions except
-     for extern inline ones.  */
-  if (flag_keep_inline_functions
-      && DECL_DECLARED_INLINE_P (decl)
-      && !DECL_EXTERNAL (decl)
-      && !DECL_DISREGARD_INLINE_LIMITS (decl))
+
+  /* Keep constructors, destructors and virtual functions.  */
+  if (DECL_STATIC_CONSTRUCTOR (decl)
+      || DECL_STATIC_DESTRUCTOR (decl)
+      || (DECL_VIRTUAL_P (decl)
+	  && optimize && (DECL_COMDAT (decl) || DECL_EXTERNAL (decl))))
      return true;
 
-  /* If we decided it was needed before, but at the time we didn't have
-     the body of the function available, then it's still needed.  We have
-     to go back and re-check its dependencies now.  */
-  if (node->needed)
-    return true;
-
   /* Externally visible functions must be output.  The exception is
-     COMDAT functions that must be output only when they are needed.
+     COMDAT functions that must be output only when they are needed.  */
 
-     When not optimizing, also output the static functions. (see
-     PR24561), but don't do so for always_inline functions, functions
-     declared inline and nested functions.  These were optimized out
-     in the original implementation and it is unclear whether we want
-     to change the behavior here.  */
-  if (((TREE_PUBLIC (decl)
-	|| (!optimize
-	    && !node->same_body_alias
-	    && !DECL_DISREGARD_INLINE_LIMITS (decl)
-	    && !DECL_DECLARED_INLINE_P (decl)
-	    && !(DECL_CONTEXT (decl)
-		 && TREE_CODE (DECL_CONTEXT (decl)) == FUNCTION_DECL)))
-       && !flag_whole_program
-       && !flag_lto)
+  if (TREE_PUBLIC (decl)
       && !DECL_COMDAT (decl) && !DECL_EXTERNAL (decl))
     return true;
 
@@ -337,22 +317,29 @@ cgraph_finalize_function (tree decl, bool nested)
   node->local.finalized = true;
   node->lowered = DECL_STRUCT_FUNCTION (decl)->cfg != NULL;
 
-  if (cgraph_decide_is_function_needed (node, decl))
-    cgraph_mark_needed_node (node);
+  /* With -fkeep-inline-functions we are keeping all inline functions except
+     for extern inline ones.  */
+  if (flag_keep_inline_functions
+      && DECL_DECLARED_INLINE_P (decl)
+      && !DECL_EXTERNAL (decl)
+      && !DECL_DISREGARD_INLINE_LIMITS (decl))
+    node->symbol.force_output = 1;
 
-  /* Since we reclaim unreachable nodes at the end of every language
-     level unit, we need to be conservative about possible entry points
-     there.  */
-  if ((TREE_PUBLIC (decl) && !DECL_COMDAT (decl) && !DECL_EXTERNAL (decl))
-      || DECL_STATIC_CONSTRUCTOR (decl)
-      || DECL_STATIC_DESTRUCTOR (decl)
-      /* COMDAT virtual functions may be referenced by vtable from
-	 other compilation unit.  Still we want to devirtualize calls
-	 to those so we need to analyze them.
-	 FIXME: We should introduce may edges for this purpose and update
-	 their handling in unreachable function removal and inliner too.  */
-      || (DECL_VIRTUAL_P (decl)
-	  && optimize && (DECL_COMDAT (decl) || DECL_EXTERNAL (decl))))
+  /* When not optimizing, also output the static functions. (see
+     PR24561), but don't do so for always_inline functions, functions
+     declared inline and nested functions.  These were optimized out
+     in the original implementation and it is unclear whether we want
+     to change the behavior here.  */
+  if ((!optimize
+       && !node->same_body_alias
+       && !DECL_DISREGARD_INLINE_LIMITS (decl)
+       && !DECL_DECLARED_INLINE_P (decl)
+       && !(DECL_CONTEXT (decl)
+	    && TREE_CODE (DECL_CONTEXT (decl)) == FUNCTION_DECL))
+      && !DECL_COMDAT (decl) && !DECL_EXTERNAL (decl))
+    node->symbol.force_output = 1;
+
+  if (cgraph_decide_is_function_needed (node, decl))
     cgraph_mark_reachable_node (node);
 
   /* If we've not yet emitted decl, tell the debug info about it.  */
@@ -402,7 +389,7 @@ cgraph_add_new_function (tree fndecl, bool lowered)
 	node = cgraph_get_create_node (fndecl);
 	node->local.local = false;
 	node->local.finalized = true;
-	node->reachable = node->needed = true;
+	node->reachable = node->symbol.force_output = true;
 	if (!lowered && cgraph_state == CGRAPH_STATE_EXPANSION)
 	  {
 	    push_cfun (DECL_STRUCT_FUNCTION (fndecl));
@@ -462,7 +449,7 @@ cgraph_mark_if_needed (tree decl)
 {
   struct cgraph_node *node = cgraph_get_node (decl);
   if (node->local.finalized && cgraph_decide_is_function_needed (node, decl))
-    cgraph_mark_needed_node (node);
+    cgraph_mark_reachable_node (node);
 }
 
 /* Return TRUE if NODE2 is equivalent to NODE or its clone.  */
@@ -577,6 +564,7 @@ verify_cgraph_node (struct cgraph_node *node)
     return;
 
   timevar_push (TV_CGRAPH_VERIFY);
+  error_found |= verify_symtab_base ((symtab_node) node);
   for (e = node->callees; e; e = e->next_callee)
     if (e->aux)
       {
@@ -600,9 +588,9 @@ verify_cgraph_node (struct cgraph_node *node)
       error ("inline clone with address taken");
       error_found = true;
     }
-  if (node->global.inlined_to && node->needed)
+  if (node->global.inlined_to && node->symbol.force_output)
     {
-      error ("inline clone is needed");
+      error ("inline clone is forced to output");
       error_found = true;
     }
   for (e = node->indirect_calls; e; e = e->next_callee)
@@ -663,12 +651,6 @@ verify_cgraph_node (struct cgraph_node *node)
       error_found = true;
     }
 
-  if (!cgraph_get_node (node->symbol.decl))
-    {
-      error ("node not found in cgraph_hash");
-      error_found = true;
-    }
-
   if (node->clone_of)
     {
       struct cgraph_node *n;
@@ -707,32 +689,6 @@ verify_cgraph_node (struct cgraph_node *node)
     {
       error ("double linked list of clones corrupted");
       error_found = true;
-    }
-  if (node->symbol.same_comdat_group)
-    {
-      symtab_node n = node->symbol.same_comdat_group;
-
-      if (!DECL_ONE_ONLY (n->symbol.decl))
-	{
-	  error ("non-DECL_ONE_ONLY node in a same_comdat_group list");
-	  error_found = true;
-	}
-      if (n == (symtab_node)node)
-	{
-	  error ("node is alone in a comdat group");
-	  error_found = true;
-	}
-      do
-	{
-	  if (!n->symbol.same_comdat_group)
-	    {
-	      error ("same_comdat_group is not a circular list");
-	      error_found = true;
-	      break;
-	    }
-	  n = n->symbol.same_comdat_group;
-	}
-      while (n != (symtab_node)node);
     }
 
   if (node->analyzed && node->alias)
@@ -890,7 +846,7 @@ verify_cgraph (void)
   if (seen_error ())
     return;
 
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     verify_cgraph_node (node);
 }
 
@@ -930,7 +886,9 @@ cgraph_analyze_function (struct cgraph_node *node)
 	    return;
 	  }
       if (!VEC_length (ipa_ref_t, node->symbol.ref_list.references))
-        ipa_record_reference (node, NULL, tgt, NULL, IPA_REF_ALIAS, NULL);
+        ipa_record_reference ((symtab_node)node, (symtab_node)tgt,
+			      IPA_REF_ALIAS, NULL);
+      cgraph_mark_reachable_node (tgt);
       if (node->same_body_alias)
 	{ 
 	  DECL_VIRTUAL_P (node->symbol.decl) = DECL_VIRTUAL_P (node->thunk.alias);
@@ -970,7 +928,7 @@ cgraph_analyze_function (struct cgraph_node *node)
       if (node->symbol.address_taken)
 	cgraph_mark_address_taken_node (cgraph_alias_aliased_node (node));
       if (cgraph_decide_is_function_needed (node, node->symbol.decl))
-	cgraph_mark_needed_node (node);
+	cgraph_mark_reachable_node (node);
     }
   else if (node->thunk.thunk_p)
     {
@@ -1026,12 +984,13 @@ void
 cgraph_process_same_body_aliases (void)
 {
   struct cgraph_node *node;
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     if (node->same_body_alias
 	&& !VEC_length (ipa_ref_t, node->symbol.ref_list.references))
       {
         struct cgraph_node *tgt = cgraph_get_node (node->thunk.alias);
-        ipa_record_reference (node, NULL, tgt, NULL, IPA_REF_ALIAS, NULL);
+        ipa_record_reference ((symtab_node)node, (symtab_node)tgt,
+			      IPA_REF_ALIAS, NULL);
       }
   same_body_aliases_done = true;
 }
@@ -1085,17 +1044,18 @@ process_function_and_variable_attributes (struct cgraph_node *first,
   struct cgraph_node *node;
   struct varpool_node *vnode;
 
-  for (node = cgraph_nodes; node != first; node = node->next)
+  for (node = cgraph_first_function (); node != first;
+       node = cgraph_next_function (node))
     {
       tree decl = node->symbol.decl;
       if (DECL_PRESERVE_P (decl))
-	cgraph_mark_needed_node (node);
+	cgraph_mark_force_output_node (node);
       if (TARGET_DLLIMPORT_DECL_ATTRIBUTES
 	  && lookup_attribute ("dllexport", DECL_ATTRIBUTES (decl))
 	  && TREE_PUBLIC (node->symbol.decl))
 	{
 	  if (node->local.finalized)
-	    cgraph_mark_needed_node (node);
+	    cgraph_mark_reachable_node (node);
 	}
       else if (lookup_attribute ("externally_visible", DECL_ATTRIBUTES (decl)))
 	{
@@ -1104,7 +1064,7 @@ process_function_and_variable_attributes (struct cgraph_node *first,
 			"%<externally_visible%>"
 			" attribute have effect only on public objects");
 	  else if (node->local.finalized)
-	     cgraph_mark_needed_node (node);
+	    cgraph_mark_reachable_node (node);
 	}
       if (lookup_attribute ("weakref", DECL_ATTRIBUTES (decl))
 	  && (node->local.finalized && !node->alias))
@@ -1126,12 +1086,13 @@ process_function_and_variable_attributes (struct cgraph_node *first,
      
       process_common_attributes (decl);
     }
-  for (vnode = varpool_nodes; vnode != first_var; vnode = vnode->next)
+  for (vnode = varpool_first_variable (); vnode != first_var;
+       vnode = varpool_next_variable (vnode))
     {
       tree decl = vnode->symbol.decl;
       if (DECL_PRESERVE_P (decl))
 	{
-	  vnode->force_output = true;
+	  vnode->symbol.force_output = true;
 	  if (vnode->finalized)
 	    varpool_mark_needed_node (vnode);
 	}
@@ -1184,14 +1145,15 @@ cgraph_analyze_functions (void)
   bitmap_obstack_initialize (NULL);
   process_function_and_variable_attributes (first_processed,
 					    first_analyzed_var);
-  first_processed = cgraph_nodes;
-  first_analyzed_var = varpool_nodes;
+  first_processed = cgraph_first_function ();
+  first_analyzed_var = varpool_first_variable ();
   varpool_analyze_pending_decls ();
   if (cgraph_dump_file)
     {
       fprintf (cgraph_dump_file, "Initial entry points:");
-      for (node = cgraph_nodes; node != first_analyzed; node = node->next)
-	if (node->needed)
+      for (node = cgraph_first_function (); node != first_analyzed;
+	   node = cgraph_next_function (node))
+	if (cgraph_decide_is_function_needed (node, node->symbol.decl))
 	  fprintf (cgraph_dump_file, " %s", cgraph_node_name (node));
       fprintf (cgraph_dump_file, "\n");
     }
@@ -1255,8 +1217,8 @@ cgraph_analyze_functions (void)
          edges.  Process their attributes too.  */
       process_function_and_variable_attributes (first_processed,
 						first_analyzed_var);
-      first_processed = cgraph_nodes;
-      first_analyzed_var = varpool_nodes;
+      first_processed = cgraph_first_function ();
+      first_analyzed_var = varpool_first_variable ();
       varpool_analyze_pending_decls ();
       cgraph_process_new_functions ();
     }
@@ -1265,21 +1227,22 @@ cgraph_analyze_functions (void)
   if (cgraph_dump_file)
     {
       fprintf (cgraph_dump_file, "Unit entry points:");
-      for (node = cgraph_nodes; node != first_analyzed; node = node->next)
-	if (node->needed)
+      for (node = cgraph_first_function (); node != first_analyzed;
+	   node = cgraph_next_function (node))
+	if (cgraph_decide_is_function_needed (node, node->symbol.decl))
 	  fprintf (cgraph_dump_file, " %s", cgraph_node_name (node));
       fprintf (cgraph_dump_file, "\n\nInitial ");
-      dump_cgraph (cgraph_dump_file);
-      dump_varpool (cgraph_dump_file);
+      dump_symtab (cgraph_dump_file);
     }
 
   if (cgraph_dump_file)
     fprintf (cgraph_dump_file, "\nReclaiming functions:");
 
-  for (node = cgraph_nodes; node != first_analyzed; node = next)
+  for (node = cgraph_first_function (); node != first_analyzed;
+       node = next)
     {
       tree decl = node->symbol.decl;
-      next = node->next;
+      next = cgraph_next_function (node);
 
       if (node->local.finalized && !gimple_has_body_p (decl)
 	  && (!node->alias || !node->thunk.alias)
@@ -1305,11 +1268,10 @@ cgraph_analyze_functions (void)
   if (cgraph_dump_file)
     {
       fprintf (cgraph_dump_file, "\n\nReclaimed ");
-      dump_cgraph (cgraph_dump_file);
-      dump_varpool (cgraph_dump_file);
+      dump_symtab (cgraph_dump_file);
     }
   bitmap_obstack_release (NULL);
-  first_analyzed = cgraph_nodes;
+  first_analyzed = cgraph_first_function ();
   ggc_collect ();
 }
 
@@ -1398,11 +1360,11 @@ cgraph_mark_functions_to_output (void)
 #ifdef ENABLE_CHECKING
   bool check_same_comdat_groups = false;
 
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     gcc_assert (!node->process);
 #endif
 
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     {
       tree decl = node->symbol.decl;
       struct cgraph_edge *e;
@@ -1472,7 +1434,7 @@ cgraph_mark_functions_to_output (void)
     }
 #ifdef ENABLE_CHECKING
   if (check_same_comdat_groups)
-    for (node = cgraph_nodes; node; node = node->next)
+    FOR_EACH_FUNCTION (node)
       if (node->symbol.same_comdat_group && !node->process)
 	{
 	  tree decl = node->symbol.decl;
@@ -1845,11 +1807,11 @@ assemble_thunks_and_aliases (struct cgraph_node *node)
       }
     else
       e = e->next_caller;
-  for (i = 0; ipa_ref_list_refering_iterate (&node->symbol.ref_list,
+  for (i = 0; ipa_ref_list_referring_iterate (&node->symbol.ref_list,
 					     i, ref); i++)
     if (ref->use == IPA_REF_ALIAS)
       {
-	struct cgraph_node *alias = ipa_ref_refering_node (ref);
+	struct cgraph_node *alias = ipa_ref_referring_node (ref);
         bool saved_written = TREE_ASM_WRITTEN (alias->thunk.alias);
 
 	/* Force assemble_alias to really output the alias this time instead
@@ -2076,12 +2038,12 @@ cgraph_output_in_order (void)
   struct varpool_node *pv;
   struct cgraph_asm_node *pa;
 
-  max = cgraph_order;
+  max = symtab_order;
   nodes = XCNEWVEC (struct cgraph_order_sort, max);
 
   varpool_analyze_pending_decls ();
 
-  for (pf = cgraph_nodes; pf; pf = pf->next)
+  FOR_EACH_DEFINED_FUNCTION (pf)
     {
       if (pf->process && !pf->thunk.thunk_p && !pf->alias)
 	{
@@ -2092,7 +2054,7 @@ cgraph_output_in_order (void)
 	}
     }
 
-  for (pv = varpool_nodes_queue; pv; pv = pv->next_needed)
+  FOR_EACH_DEFINED_VARIABLE (pv)
     {
       i = pv->symbol.order;
       gcc_assert (nodes[i].kind == ORDER_UNDEFINED);
@@ -2246,14 +2208,14 @@ output_weakrefs (void)
 {
   struct cgraph_node *node;
   struct varpool_node *vnode;
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     if (node->alias && DECL_EXTERNAL (node->symbol.decl)
         && !TREE_ASM_WRITTEN (node->symbol.decl)
 	&& lookup_attribute ("weakref", DECL_ATTRIBUTES (node->symbol.decl)))
       assemble_alias (node->symbol.decl,
 		      node->thunk.alias ? DECL_ASSEMBLER_NAME (node->thunk.alias)
 		      : get_alias_symbol (node->symbol.decl));
-  for (vnode = varpool_nodes; vnode; vnode = vnode->next)
+  FOR_EACH_VARIABLE (vnode)
     if (vnode->alias && DECL_EXTERNAL (vnode->symbol.decl)
         && !TREE_ASM_WRITTEN (vnode->symbol.decl)
 	&& lookup_attribute ("weakref", DECL_ATTRIBUTES (vnode->symbol.decl)))
@@ -2320,7 +2282,7 @@ cgraph_copy_node_for_versioning (struct cgraph_node *old_version,
    new_version->analyzed = old_version->analyzed;
    new_version->local = old_version->local;
    new_version->symbol.externally_visible = false;
-   new_version->local.local = true;
+   new_version->local.local = old_version->analyzed;
    new_version->global = old_version->global;
    new_version->rtl = old_version->rtl;
    new_version->reachable = true;
@@ -2578,7 +2540,7 @@ cgraph_materialize_all_clones (void)
   while (!stabilized)
     {
       stabilized = true;
-      for (node = cgraph_nodes; node; node = node->next)
+      FOR_EACH_FUNCTION (node)
         {
 	  if (node->clone_of && node->symbol.decl != node->clone_of->symbol.decl
 	      && !gimple_has_body_p (node->symbol.decl))
@@ -2628,7 +2590,7 @@ cgraph_materialize_all_clones (void)
 	    }
 	}
     }
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     if (!node->analyzed && node->callees)
       cgraph_node_remove_callees (node);
   if (cgraph_dump_file)
@@ -2649,7 +2611,7 @@ cgraph_optimize (void)
     return;
 
 #ifdef ENABLE_CHECKING
-  verify_cgraph ();
+  verify_symtab ();
 #endif
 
   /* Frontend may output common variables after the unit has been finalized.
@@ -2685,8 +2647,7 @@ cgraph_optimize (void)
   if (cgraph_dump_file)
     {
       fprintf (cgraph_dump_file, "Optimized ");
-      dump_cgraph (cgraph_dump_file);
-      dump_varpool (cgraph_dump_file);
+      dump_symtab (cgraph_dump_file);
     }
   if (post_ipa_mem_report)
     {
@@ -2700,7 +2661,7 @@ cgraph_optimize (void)
   if (!quiet_flag)
     fprintf (stderr, "Assembling functions:\n");
 #ifdef ENABLE_CHECKING
-  verify_cgraph ();
+  verify_symtab ();
 #endif
 
   cgraph_materialize_all_clones ();
@@ -2708,7 +2669,7 @@ cgraph_optimize (void)
   execute_ipa_pass_list (all_late_ipa_passes);
   cgraph_remove_unreachable_nodes (true, dump_file);
 #ifdef ENABLE_CHECKING
-  verify_cgraph ();
+  verify_symtab ();
 #endif
   bitmap_obstack_release (NULL);
   cgraph_mark_functions_to_output ();
@@ -2733,11 +2694,10 @@ cgraph_optimize (void)
   if (cgraph_dump_file)
     {
       fprintf (cgraph_dump_file, "\nFinal ");
-      dump_cgraph (cgraph_dump_file);
-      dump_varpool (cgraph_dump_file);
+      dump_symtab (cgraph_dump_file);
     }
 #ifdef ENABLE_CHECKING
-  verify_cgraph ();
+  verify_symtab ();
   /* Double check that all inline clones are gone and that all
      function bodies have been released from memory.  */
   if (!seen_error ())
@@ -2745,10 +2705,9 @@ cgraph_optimize (void)
       struct cgraph_node *node;
       bool error_found = false;
 
-      for (node = cgraph_nodes; node; node = node->next)
-	if (node->analyzed
-	    && (node->global.inlined_to
-		|| gimple_has_body_p (node->symbol.decl)))
+      FOR_EACH_DEFINED_FUNCTION (node)
+	if (node->global.inlined_to
+	    || gimple_has_body_p (node->symbol.decl))
 	  {
 	    error_found = true;
 	    dump_cgraph_node (stderr, node);

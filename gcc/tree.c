@@ -1315,6 +1315,24 @@ cst_and_fits_in_hwi (const_tree x)
 	  || TREE_INT_CST_HIGH (x) == -1);
 }
 
+/* Build a newly constructed TREE_VEC node of length LEN.  */
+
+tree
+make_vector_stat (unsigned len MEM_STAT_DECL)
+{
+  tree t;
+  unsigned length = (len - 1) * sizeof (tree) + sizeof (struct tree_vector);
+
+  record_node_allocation_statistics (VECTOR_CST, length);
+
+  t = ggc_alloc_zone_cleared_tree_node_stat (&tree_zone, length PASS_MEM_STAT);
+
+  TREE_SET_CODE (t, VECTOR_CST);
+  TREE_CONSTANT (t) = 1;
+
+  return t;
+}
+
 /* Return a new VECTOR_CST node whose type is TYPE and whose values
    are in a list pointed to by VALS.  */
 
@@ -1323,16 +1341,7 @@ build_vector_stat (tree type, tree *vals MEM_STAT_DECL)
 {
   int over = 0;
   unsigned cnt = 0;
-  tree v;
-  int length = ((TYPE_VECTOR_SUBPARTS (type) - 1) * sizeof (tree)
-		+ sizeof (struct tree_vector));
-
-  record_node_allocation_statistics (VECTOR_CST, length);
-
-  v = ggc_alloc_zone_cleared_tree_node_stat (&tree_zone, length PASS_MEM_STAT);
-
-  TREE_SET_CODE (v, VECTOR_CST);
-  TREE_CONSTANT (v) = 1;
+  tree v = make_vector (TYPE_VECTOR_SUBPARTS (type));
   TREE_TYPE (v) = type;
 
   /* Iterate through elements and check for overflow.  */
@@ -5176,14 +5185,14 @@ free_lang_data_in_cgraph (void)
   fld.types = VEC_alloc (tree, heap, 100);
 
   /* Find decls and types in the body of every function in the callgraph.  */
-  for (n = cgraph_nodes; n; n = n->next)
+  FOR_EACH_FUNCTION (n)
     find_decls_types_in_node (n, &fld);
 
   FOR_EACH_VEC_ELT (alias_pair, alias_pairs, i, p)
     find_decls_types (p->decl, &fld);
 
   /* Find decls and types in every varpool symbol.  */
-  for (v = varpool_nodes; v; v = v->next)
+  FOR_EACH_VARIABLE (v)
     find_decls_types_in_var (v, &fld);
 
   /* Set the assembler name on every decl found.  We need to do this

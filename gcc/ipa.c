@@ -91,12 +91,13 @@ process_references (struct ipa_ref_list *list,
   struct ipa_ref *ref;
   for (i = 0; ipa_ref_list_reference_iterate (list, i, ref); i++)
     {
-      if (ref->refered_type == IPA_REF_CGRAPH)
+      if (symtab_function_p (ref->referred))
 	{
 	  struct cgraph_node *node = ipa_ref_node (ref);
 	  if (!node->reachable
 	      && node->analyzed
 	      && (!DECL_EXTERNAL (node->symbol.decl)
+		  || node->alias
 	          || before_inlining_p))
 	    node->reachable = true;
 	  enqueue_cgraph_node (node, first);
@@ -154,7 +155,7 @@ has_addr_references_p (struct cgraph_node *node,
   int i;
   struct ipa_ref *ref;
 
-  for (i = 0; ipa_ref_list_refering_iterate (&node->symbol.ref_list,
+  for (i = 0; ipa_ref_list_referring_iterate (&node->symbol.ref_list,
 					     i, ref); i++)
     if (ref->use == IPA_REF_ADDR)
       return true;
@@ -176,14 +177,14 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
   bool changed = false;
 
 #ifdef ENABLE_CHECKING
-  verify_cgraph ();
+  verify_symtab ();
 #endif
   if (file)
     fprintf (file, "\nReclaiming functions:");
 #ifdef ENABLE_CHECKING
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     gcc_assert (!node->symbol.aux);
-  for (vnode = varpool_nodes; vnode; vnode = vnode->next)
+  FOR_EACH_VARIABLE (vnode)
     gcc_assert (!vnode->symbol.aux);
 #endif
   varpool_reset_queue ();
@@ -191,7 +192,7 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
      This is mostly when they can be referenced externally.  Inline clones
      are special since their declarations are shared with master clone and thus
      cgraph_can_remove_if_no_direct_calls_and_refs_p should not be called on them.  */
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     if (node->analyzed && !node->global.inlined_to
 	&& (!cgraph_can_remove_if_no_direct_calls_and_refs_p (node)
 	    /* Keep around virtual functions for possible devirtualization.  */
@@ -210,11 +211,11 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
       }
 
   /* Mark variables that are obviously needed.  */
-  for (vnode = varpool_nodes; vnode; vnode = vnode->next)
+  FOR_EACH_VARIABLE (vnode)
     {
       vnode->next_needed = NULL;
       vnode->prev_needed = NULL;
-      if ((vnode->analyzed || vnode->force_output)
+      if ((vnode->analyzed || vnode->symbol.force_output)
 	  && !varpool_can_remove_if_no_refs (vnode))
 	{
 	  vnode->needed = false;
@@ -254,6 +255,7 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
 		      && node->analyzed
 		      && (!e->inline_failed
 			  || !DECL_EXTERNAL (e->callee->symbol.decl)
+			  || node->alias
 			  || before_inlining_p))
 		    e->callee->reachable = true;
 		  enqueue_cgraph_node (e->callee, &first);
@@ -329,9 +331,9 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
      Also we need to care functions that are unreachable but we need to keep them around
      for later clonning.  In this case we also turn them to unanalyzed nodes, but
      keep the body around.  */
-  for (node = cgraph_nodes; node; node = next)
+  for (node = cgraph_first_function (); node; node = next)
     {
-      next = node->next;
+      next = cgraph_next_function (node);
       if (node->symbol.aux && !node->reachable)
         {
 	  cgraph_node_remove_callees (node);
@@ -352,14 +354,14 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
 	  for (e = node->callers; e && !found; e = e->next_caller)
 	    if (e->caller->reachable)
 	      found = true;
-	  for (i = 0; (ipa_ref_list_refering_iterate (&node->symbol.ref_list,
+	  for (i = 0; (ipa_ref_list_referring_iterate (&node->symbol.ref_list,
 						      i, ref)
 		       && !found); i++)
-	    if (ref->refering_type == IPA_REF_CGRAPH
-		&& ipa_ref_refering_node (ref)->reachable)
+	    if (symtab_function_p (ref->referring)
+		&& ipa_ref_referring_node (ref)->reachable)
 	      found = true;
-	    else if (ref->refering_type == IPA_REF_VARPOOL
-		     && ipa_ref_refering_varpool_node (ref)->needed)
+	    else if (symtab_variable_p (ref->referring)
+		     && ipa_ref_referring_varpool_node (ref)->needed)
 	      found = true;
 
 	  /* If so, we need to keep node in the callgraph.  */
@@ -405,7 +407,7 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
 	    }
 	}
     }
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     {
       /* Inline clones might be kept around so their materializing allows further
          cloning.  If the function the clone is inlined into is removed, we need
@@ -425,9 +427,9 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
 
   if (file)
     fprintf (file, "Reclaiming variables:");
-  for (vnode = varpool_nodes; vnode; vnode = vnext)
+  for (vnode = varpool_first_variable (); vnode; vnode = vnext)
     {
-      vnext = vnode->next;
+      vnext = varpool_next_variable (vnode);
       if (!vnode->needed)
         {
 	  if (file)
@@ -441,7 +443,7 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
 
   if (file)
     fprintf (file, "\nClearing address taken flags:");
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_DEFINED_FUNCTION (node)
     if (node->symbol.address_taken
 	&& !node->symbol.used_from_other_partition)
       {
@@ -467,7 +469,7 @@ cgraph_remove_unreachable_nodes (bool before_inlining_p, FILE *file)
     return changed;
 
 #ifdef ENABLE_CHECKING
-  verify_cgraph ();
+  verify_symtab ();
 #endif
 
   /* Reclaim alias pairs for functions that have disappeared from the
@@ -492,7 +494,7 @@ ipa_discover_readonly_nonaddressable_vars (void)
   struct varpool_node *vnode;
   if (dump_file)
     fprintf (dump_file, "Clearing variable flags:");
-  for (vnode = varpool_nodes; vnode; vnode = vnode->next)
+  FOR_EACH_VARIABLE (vnode)
     if (vnode->finalized && varpool_all_refs_explicit_p (vnode)
 	&& (TREE_ADDRESSABLE (vnode->symbol.decl)
 	    || !TREE_READONLY (vnode->symbol.decl)))
@@ -501,7 +503,7 @@ ipa_discover_readonly_nonaddressable_vars (void)
 	bool address_taken = false;
 	int i;
         struct ipa_ref *ref;
-        for (i = 0; ipa_ref_list_refering_iterate (&vnode->symbol.ref_list,
+        for (i = 0; ipa_ref_list_referring_iterate (&vnode->symbol.ref_list,
 						   i, ref)
 		    && (!written || !address_taken); i++)
 	  switch (ref->use)
@@ -542,14 +544,14 @@ cgraph_address_taken_from_non_vtable_p (struct cgraph_node *node)
 {
   int i;
   struct ipa_ref *ref;
-  for (i = 0; ipa_ref_list_refering_iterate (&node->symbol.ref_list,
+  for (i = 0; ipa_ref_list_referring_iterate (&node->symbol.ref_list,
 					     i, ref); i++)
     if (ref->use == IPA_REF_ADDR)
       {
 	struct varpool_node *node;
-	if (ref->refering_type == IPA_REF_CGRAPH)
+	if (symtab_function_p (ref->referring))
 	  return true;
-	node = ipa_ref_refering_varpool_node (ref);
+	node = ipa_ref_referring_varpool_node (ref);
 	if (!DECL_VIRTUAL_P (node->symbol.decl))
 	  return true;
       }
@@ -659,6 +661,12 @@ cgraph_externally_visible_p (struct cgraph_node *node,
 bool
 varpool_externally_visible_p (struct varpool_node *vnode, bool aliased)
 {
+  /* Do not touch weakrefs; while they are not externally visible,
+     dropping their DECL_EXTERNAL flags confuse most
+     of code handling them.  */
+  if (vnode->alias && DECL_EXTERNAL (vnode->symbol.decl))
+    return true;
+
   if (!DECL_COMDAT (vnode->symbol.decl) && !TREE_PUBLIC (vnode->symbol.decl))
     return false;
 
@@ -700,7 +708,7 @@ varpool_externally_visible_p (struct varpool_node *vnode, bool aliased)
      is faster for dynamic linking.  Also this match logic hidding vtables
      from LTO symbol tables.  */
   if ((in_lto_p || flag_whole_program)
-      && !vnode->force_output
+      && !vnode->symbol.force_output
       && DECL_COMDAT (vnode->symbol.decl) && DECL_VIRTUAL_P (vnode->symbol.decl))
     return false;
 
@@ -730,12 +738,12 @@ varpool_externally_visible_p (struct varpool_node *vnode, bool aliased)
 /* Dissolve the same_comdat_group list in which NODE resides.  */
 
 static void
-dissolve_same_comdat_group_list (struct cgraph_node *node)
+dissolve_same_comdat_group_list (symtab_node node)
 {
-  struct cgraph_node *n = node, *next;
+  symtab_node n = node, next;
   do
     {
-      next = cgraph (n->symbol.same_comdat_group);
+      next = n->symbol.same_comdat_group;
       n->symbol.same_comdat_group = NULL;
       n = next;
     }
@@ -776,8 +784,7 @@ function_and_variable_visibility (bool whole_program)
         {
 	  if (!node->analyzed)
 	    continue;
-	  cgraph_mark_needed_node (node);
-	  gcc_assert (node->needed);
+	  cgraph_mark_force_output_node (node);
 	  pointer_set_insert (aliased_nodes, node);
 	  if (dump_file)
 	    fprintf (dump_file, "  node %s/%i",
@@ -786,6 +793,7 @@ function_and_variable_visibility (bool whole_program)
       else if ((vnode = varpool_node_for_asm (p->target)) != NULL
 	       && !DECL_EXTERNAL (vnode->symbol.decl))
         {
+	  vnode->symbol.force_output = 1;
 	  varpool_mark_needed_node (vnode);
 	  gcc_assert (vnode->needed);
 	  pointer_set_insert (aliased_vnodes, vnode);
@@ -797,7 +805,7 @@ function_and_variable_visibility (bool whole_program)
        fprintf (dump_file, "\n");
     }
 
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_FUNCTION (node)
     {
       int flags = flags_from_decl_or_type (node->symbol.decl);
 
@@ -813,9 +821,9 @@ function_and_variable_visibility (bool whole_program)
       /* Frontends and alias code marks nodes as needed before parsing is finished.
 	 We may end up marking as node external nodes where this flag is meaningless
 	 strip it.  */
-      if (node->needed
+      if (node->symbol.force_output
 	  && (DECL_EXTERNAL (node->symbol.decl) || !node->analyzed))
-	node->needed = 0;
+	node->symbol.force_output = 0;
 
       /* C++ FE on lack of COMDAT support create local COMDAT functions
 	 (that ought to be shared but can not due to object format
@@ -838,7 +846,7 @@ function_and_variable_visibility (bool whole_program)
 		 all of them have to be, otherwise it is a front-end bug.  */
 	      gcc_assert (DECL_EXTERNAL (n->symbol.decl));
 #endif
-	  dissolve_same_comdat_group_list (node);
+	  dissolve_same_comdat_group_list ((symtab_node) node);
 	}
       gcc_assert ((!DECL_WEAK (node->symbol.decl)
 		  && !DECL_COMDAT (node->symbol.decl))
@@ -865,7 +873,7 @@ function_and_variable_visibility (bool whole_program)
 	       in the group and they will all be made local.  We need to
 	       dissolve the group at once so that the predicate does not
 	       segfault though. */
-	    dissolve_same_comdat_group_list (node);
+	    dissolve_same_comdat_group_list ((symtab_node) node);
 	}
 
       if (node->thunk.thunk_p
@@ -889,9 +897,9 @@ function_and_variable_visibility (bool whole_program)
 	    DECL_EXTERNAL (node->symbol.decl) = 1;
 	}
     }
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_DEFINED_FUNCTION (node)
     node->local.local = cgraph_local_node_p (node);
-  for (vnode = varpool_nodes; vnode; vnode = vnode->next)
+  FOR_EACH_VARIABLE (vnode)
     {
       /* weak flag makes no sense on local variables.  */
       gcc_assert (!DECL_WEAK (vnode->symbol.decl)
@@ -921,7 +929,7 @@ function_and_variable_visibility (bool whole_program)
 		    (TYPE_ADDR_SPACE (TREE_TYPE (vnode->symbol.decl))))))
 	DECL_COMMON (vnode->symbol.decl) = 0;
     }
-  for (vnode = varpool_nodes_queue; vnode; vnode = vnode->next_needed)
+  FOR_EACH_DEFINED_VARIABLE (vnode)
     {
       if (!vnode->finalized)
         continue;
@@ -936,6 +944,8 @@ function_and_variable_visibility (bool whole_program)
 	{
 	  gcc_assert (in_lto_p || whole_program || !TREE_PUBLIC (vnode->symbol.decl));
 	  cgraph_make_decl_local (vnode->symbol.decl);
+	  if (vnode->symbol.same_comdat_group)
+	    dissolve_same_comdat_group_list ((symtab_node) vnode);
 	  vnode->symbol.resolution = LDPR_PREVAILING_DEF_IRONLY;
 	}
      gcc_assert (TREE_STATIC (vnode->symbol.decl));
@@ -946,17 +956,17 @@ function_and_variable_visibility (bool whole_program)
   if (dump_file)
     {
       fprintf (dump_file, "\nMarking local functions:");
-      for (node = cgraph_nodes; node; node = node->next)
+      FOR_EACH_DEFINED_FUNCTION (node)
 	if (node->local.local)
 	  fprintf (dump_file, " %s", cgraph_node_name (node));
       fprintf (dump_file, "\n\n");
       fprintf (dump_file, "\nMarking externally visible functions:");
-      for (node = cgraph_nodes; node; node = node->next)
+      FOR_EACH_DEFINED_FUNCTION (node)
 	if (node->symbol.externally_visible)
 	  fprintf (dump_file, " %s", cgraph_node_name (node));
       fprintf (dump_file, "\n\n");
       fprintf (dump_file, "\nMarking externally visible variables:");
-      for (vnode = varpool_nodes_queue; vnode; vnode = vnode->next_needed)
+      FOR_EACH_DEFINED_VARIABLE (vnode)
 	if (vnode->symbol.externally_visible)
 	  fprintf (dump_file, " %s", varpool_node_name (vnode));
       fprintf (dump_file, "\n\n");
@@ -989,7 +999,7 @@ struct simple_ipa_opt_pass pass_ipa_function_and_variable_visibility =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_remove_functions | TODO_dump_cgraph
+  TODO_remove_functions | TODO_dump_symtab
   | TODO_ggc_collect			/* todo_flags_finish */
  }
 };
@@ -1012,17 +1022,17 @@ whole_program_function_and_variable_visibility (void)
 
   function_and_variable_visibility (flag_whole_program);
 
-  for (node = cgraph_nodes; node; node = node->next)
+  FOR_EACH_DEFINED_FUNCTION (node)
     if ((node->symbol.externally_visible && !DECL_COMDAT (node->symbol.decl))
         && node->local.finalized)
-      cgraph_mark_needed_node (node);
-  for (vnode = varpool_nodes_queue; vnode; vnode = vnode->next_needed)
+      cgraph_mark_reachable_node (node);
+  FOR_EACH_DEFINED_VARIABLE (vnode)
     if (vnode->symbol.externally_visible && !DECL_COMDAT (vnode->symbol.decl))
       varpool_mark_needed_node (vnode);
   if (dump_file)
     {
       fprintf (dump_file, "\nNeeded variables:");
-      for (vnode = varpool_nodes_queue; vnode; vnode = vnode->next_needed)
+      FOR_EACH_DEFINED_VARIABLE (vnode)
 	if (vnode->needed)
 	  fprintf (dump_file, " %s", varpool_node_name (vnode));
       fprintf (dump_file, "\n\n");
@@ -1047,7 +1057,7 @@ struct ipa_opt_pass_d pass_ipa_whole_program_visibility =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_remove_functions | TODO_dump_cgraph
+  TODO_remove_functions | TODO_dump_symtab
   | TODO_ggc_collect			/* todo_flags_finish */
  },
  NULL,					/* generate_summary */
@@ -1405,10 +1415,9 @@ static unsigned int
 ipa_cdtor_merge (void)
 {
   struct cgraph_node *node;
-  for (node = cgraph_nodes; node; node = node->next)
-    if (node->analyzed
-	&& (DECL_STATIC_CONSTRUCTOR (node->symbol.decl)
-	    || DECL_STATIC_DESTRUCTOR (node->symbol.decl)))
+  FOR_EACH_DEFINED_FUNCTION (node)
+    if (DECL_STATIC_CONSTRUCTOR (node->symbol.decl)
+	|| DECL_STATIC_DESTRUCTOR (node->symbol.decl))
        record_cdtor_fn (node);
   build_cdtor_fns ();
   VEC_free (tree, heap, static_ctors);

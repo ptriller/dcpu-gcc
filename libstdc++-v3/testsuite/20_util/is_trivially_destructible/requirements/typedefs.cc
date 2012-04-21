@@ -1,9 +1,8 @@
-// { dg-options "-std=gnu++0x" }
-// { dg-do compile }
-
-// 2009-12-30  Paolo Carlini  <paolo.carlini@oracle.com>
+// { dg-options "-std=gnu++11" }
 //
-// Copyright (C) 2009 Free Software Foundation, Inc.
+// 2012-04-15  Paolo Carlini  <paolo.carlini@oracle.com>
+//
+// Copyright (C) 2012 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -25,12 +24,14 @@
 
 #include <type_traits>
 
+// { dg-do compile }
+
 void test01()
 {
   // Check for required typedefs
-  typedef std::is_explicitly_convertible<int, int>   test_type;
-  typedef test_type::value_type                      value_type;
-  typedef test_type::type                            type;
-  typedef test_type::type::value_type                type_value_type;
-  typedef test_type::type::type                      type_type;
+  typedef std::is_trivially_destructible<int> test_type;
+  typedef test_type::value_type               value_type;
+  typedef test_type::type                     type;
+  typedef test_type::type::value_type         type_value_type;
+  typedef test_type::type::type               type_type;
 }

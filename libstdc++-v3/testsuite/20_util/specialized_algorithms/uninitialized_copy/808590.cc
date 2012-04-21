@@ -1,9 +1,4 @@
-// { dg-options "-std=gnu++0x" }
-// { dg-do compile }
-
-// 2009-12-30  Paolo Carlini  <paolo.carlini@oracle.com>
-
-// Copyright (C) 2009 Free Software Foundation, Inc.
+// Copyright (C) 2012 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -12,7 +7,7 @@
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// but WITHOUT ANY WARRANTY; without Pred the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
@@ -20,12 +15,34 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// NB: This file is for testing type_traits with NO OTHER INCLUDES.
+#include <vector>
+#include <stdexcept>
 
-#include <type_traits>
-
-namespace std
+// 4.4.x only
+struct c 
 {
-  typedef short test_type;
-  template struct is_explicitly_convertible<test_type, test_type>;
+  void *m;
+
+  c(void* o = 0) : m(o) {}
+  c(const c &r) : m(r.m) {}
+
+  template<class T>
+    explicit c(T &o) : m((void*)0xdeadfbeef) { }
+};
+
+int main() 
+{
+  std::vector<c> cbs;
+  const c cb((void*)0xcafebabe);
+
+  for (int fd = 62; fd < 67; ++fd) 
+    {
+      cbs.resize(fd + 1);
+      cbs[fd] = cb;
+    }
+
+  for (int fd = 62; fd< 67; ++fd)
+    if (cb.m != cbs[fd].m)
+      throw std::runtime_error("wrong");
+  return 0;
 }

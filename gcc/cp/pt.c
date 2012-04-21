@@ -1839,6 +1839,7 @@ determine_specialization (tree template_id,
 	{
 	  tree decl_arg_types;
 	  tree fn_arg_types;
+	  tree insttype;
 
 	  /* In case of explicit specialization, we need to check if
 	     the number of template headers appearing in the specialization
@@ -1900,15 +1901,6 @@ determine_specialization (tree template_id,
 	  fn_arg_types 
 	    = skip_artificial_parms_for (fn, fn_arg_types);
 
-	  /* Check that the number of function parameters matches.
-	     For example,
-	       template <class T> void f(int i = 0);
-	       template <> void f<int>();
-	     The specialization f<int> is invalid but is not caught
-	     by get_bindings below.  */
-	  if (list_length (fn_arg_types) != list_length (decl_arg_types))
-	    continue;
-
 	  /* Function templates cannot be specializations; there are
 	     no partial specializations of functions.  Therefore, if
 	     the type of DECL does not match FN, there is no
@@ -1927,6 +1919,15 @@ determine_specialization (tree template_id,
 	  if (!targs)
 	    /* We cannot deduce template arguments that when used to
 	       specialize TMPL will produce DECL.  */
+	    continue;
+
+	  /* Make sure that the deduced arguments actually work.  */
+	  insttype = tsubst (TREE_TYPE (fn), targs, tf_none, NULL_TREE);
+	  if (insttype == error_mark_node)
+	    continue;
+	  fn_arg_types
+	    = skip_artificial_parms_for (fn, TYPE_ARG_TYPES (insttype));
+	  if (!compparms (fn_arg_types, decl_arg_types))
 	    continue;
 
 	  /* Save this template, and the arguments deduced.  */
@@ -4376,6 +4377,18 @@ process_partial_specialization (tree decl)
 						   (maintmpl)))))
     error ("partial specialization %qT does not specialize any template arguments", type);
 
+  /* A partial specialization that replaces multiple parameters of the
+     primary template with a pack expansion is less specialized for those
+     parameters.  */
+  if (nargs < DECL_NTPARMS (maintmpl))
+    {
+      error ("partial specialization is not more specialized than the "
+	     "primary template because it replaces multiple parameters "
+	     "with a pack expansion");
+      inform (DECL_SOURCE_LOCATION (maintmpl), "primary template here");
+      return decl;
+    }
+
   /* [temp.class.spec]
 
      A partially specialized non-type argument expression shall not
@@ -5679,7 +5692,11 @@ convert_nontype_argument (tree type, tree expr, tsubst_flags_t complain)
      value_dependent_expression_p.  */
   if (TYPE_PTROBV_P (type)
       && TREE_CODE (TREE_TYPE (expr)) == ARRAY_TYPE)
-    expr = decay_conversion (expr);
+    {
+      expr = decay_conversion (expr, complain);
+      if (expr == error_mark_node)
+	return error_mark_node;
+    }
 
   /* If we are in a template, EXPR may be non-dependent, but still
      have a syntactic, rather than semantic, form.  For example, EXPR
@@ -5887,7 +5904,7 @@ convert_nontype_argument (tree type, tree expr, tsubst_flags_t complain)
 	    }
 	}
 
-      expr = decay_conversion (expr);
+      expr = decay_conversion (expr, complain);
       if (expr == error_mark_node)
 	return error_mark_node;
 
@@ -5972,7 +5989,7 @@ convert_nontype_argument (tree type, tree expr, tsubst_flags_t complain)
 	 context information to decay the pointer.  */
       if (!type_unknown_p (expr_type))
 	{
-	  expr = decay_conversion (expr);
+	  expr = decay_conversion (expr, complain);
 	  if (expr == error_mark_node)
 	    return error_mark_node;
 	}
@@ -6428,6 +6445,7 @@ convert_template_argument (tree parm,
   is_tmpl_type = 
     ((TREE_CODE (arg) == TEMPLATE_DECL
       && TREE_CODE (DECL_TEMPLATE_RESULT (arg)) == TYPE_DECL)
+     || (requires_tmpl_type && TREE_CODE (arg) == TYPE_ARGUMENT_PACK)
      || TREE_CODE (arg) == TEMPLATE_TEMPLATE_PARM
      || TREE_CODE (arg) == UNBOUND_CLASS_TEMPLATE);
 
@@ -6499,7 +6517,9 @@ convert_template_argument (tree parm,
     {
       if (requires_tmpl_type)
 	{
-	  if (TREE_CODE (TREE_TYPE (arg)) == UNBOUND_CLASS_TEMPLATE)
+	  if (template_parameter_pack_p (parm) && ARGUMENT_PACK_P (orig_arg))
+	    val = orig_arg;
+	  else if (TREE_CODE (TREE_TYPE (arg)) == UNBOUND_CLASS_TEMPLATE)
 	    /* The number of argument required is not known yet.
 	       Just accept it for now.  */
 	    val = TREE_TYPE (arg);
@@ -6697,7 +6717,12 @@ coerce_template_parameter_pack (tree parms,
             TREE_VEC_ELT (packed_types, arg_idx - parm_idx);
         }
 
-      if (arg != error_mark_node)
+      if (arg == error_mark_node)
+	{
+	  if (complain & tf_error)
+	    error ("template argument %d is invalid", arg_idx + 1);
+	}
+      else
 	arg = convert_template_argument (actual_parm, 
 					 arg, new_args, complain, parm_idx,
 					 in_decl);
@@ -6882,7 +6907,7 @@ coerce_template_parms (tree parms,
             {
               /* We don't know how many args we have yet, just
                  use the unconverted ones for now.  */
-              new_inner_args = args;
+              new_inner_args = inner_args;
               break;
             }
         }
@@ -9513,7 +9538,7 @@ tsubst_pack_expansion (tree t, tree args, tsubst_flags_t complain,
         }
 
       /* Substitute into the PATTERN with the altered arguments.  */
-      if (TREE_CODE (t) == EXPR_PACK_EXPANSION)
+      if (!TYPE_P (pattern))
         TREE_VEC_ELT (result, i) = 
           tsubst_expr (pattern, args, complain, in_decl,
                        /*integral_constant_expression_p=*/false);
