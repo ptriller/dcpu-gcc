@@ -343,6 +343,10 @@ frv*)	cpu_type=frv
 moxie*)	cpu_type=moxie
 	target_has_targetm_common=no
 	;;
+dcpu16*)
+	cpu_type=dcpu16
+	target_has_targetm_common=no
+	;;
 fido-*-*)
 	cpu_type=m68k
 	extra_headers=math-68881.h
