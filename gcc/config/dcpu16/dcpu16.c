@@ -47,5 +47,25 @@
 #include "langhooks.h"
 #include "df.h"
 
+/* The PRINT_OPERAND worker.  */
 
+void
+dcpu16_print_operand (FILE *file, rtx x, int code)
+{
+  
+}
+
+void
+dcpu16_print_operand_address (FILE *file, rtx x)
+{
+  
+}
+
+void
+dcpu16_expand_epilogue(void)
+{
+  emit_jump_insn(gen_IITB_return());
+}
 struct gcc_target targetm = TARGET_INITIALIZER;
+
+//#include "gt-dcpu16.h"

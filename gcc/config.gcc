@@ -1020,6 +1020,18 @@ moxie-*-elf)
 	tm_file="dbxelf.h elfos.h newlib-stdint.h ${tm_file}"
 	tmake_file="${tmake_file} moxie/t-moxie"
 	;;
+dcpu16-*-elf)
+	gas=yes
+	gnu_ld=yes
+	file_base="dcpu16"
+	tm_file="${cpu_type}/${file_base}.h"
+	md_file="${cpu_type}/${file_base}.md"
+	out_file="${cpu_type}/${file_base}.c"
+	tm_p_file="${cpu_type}/${file_base}-protos.h"
+	echo ${target}
+	tm_file="dbxelf.h elfos.h newlib-stdint.h ${tm_file}"
+	tmake_file="${tmake_file} moxie/t-moxie"
+	;;
 moxie-*-uclinux*)
 	gas=yes
 	gnu_ld=yes
